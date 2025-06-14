@@ -25,7 +25,7 @@ export async function POST(request: Request) {
     connection = await mysql.createConnection(dbConfig);
 
     // Find the user by their username
-    const query = 'SELECT * FROM user WHERE username = ?';
+    const query = 'SELECT * FROM users WHERE username = ?';
     const [rows] = await connection.execute(query, [username]);
 
     // If no user is found, return an error
