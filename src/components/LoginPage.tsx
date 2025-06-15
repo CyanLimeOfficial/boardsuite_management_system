@@ -1,7 +1,7 @@
+// components/LoginPage.tsx
 'use client';
 
-import { useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useState, FormEvent } from 'react';
 import { Input } from './ui/input';
 import { Button } from './ui/button';
 import { Label } from './ui/label';
@@ -10,20 +10,18 @@ import { Label } from './ui/label';
 const UserIcon = (props: React.SVGProps<SVGSVGElement>) => ( <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" {...props}><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg> );
 const LockIcon = (props: React.SVGProps<SVGSVGElement>) => ( <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" {...props}><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg> );
 
-
 export default function LoginPage() {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
-  const router = useRouter();
 
-  const handleLogin = async (e: React.FormEvent) => {
+
+  const handleLogin = async (e: FormEvent) => {
     e.preventDefault();
     setError(null);
 
     try {
-      // THIS IS THE CONNECTION POINT
-      const response = await fetch('/api/login', {
+      const response = await fetch('/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ username, password }),
@@ -34,9 +32,10 @@ export default function LoginPage() {
       if (!response.ok) {
         throw new Error(data.message || 'Login failed.');
       }
-
-      // If login is successful, redirect to the dashboard
-      router.push('/dashboard');
+      // Throw the freaking token yowwe
+      const { token } = data;
+      localStorage.setItem('authToken', token);
+      window.location.href = '/dashboard';
 
     } catch (err: any) {
       setError(err.message);
@@ -52,7 +51,6 @@ export default function LoginPage() {
 
       <div className="max-w-md w-full mx-auto mt-8 bg-white p-8 border border-gray-200 rounded-lg shadow-lg">
         <form className="space-y-6" onSubmit={handleLogin}>
-          {/* ... form inputs for username and password ... */}
             <div>
                 <Label htmlFor="username">Username</Label>
                 <div className="mt-2 relative">

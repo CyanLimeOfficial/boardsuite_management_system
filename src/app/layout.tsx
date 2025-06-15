@@ -1,26 +1,25 @@
-// =================================================================================
-// FILE: src/app/layout.tsx
-// EXPLANATION: This is the root layout. It sets up the basic HTML structure.
-// =================================================================================
-import './globals.css'
-import type { Metadata } from 'next'
-import { Inter } from 'next/font/google'
+// app/layout.tsx
+import { AuthProvider } from "@/app/credentials/AuthCredentials"; // Correctly import the provider
+import "./globals.css";
 
-const inter = Inter({ subsets: ['latin'] })
-
-export const metadata: Metadata = {
-  title: 'Boarding House Management',
-  description: 'Dashboard for managing a boarding house',
-}
+export const metadata = {
+  title: "BoardSuite App",
+  description: "Management System",
+};
 
 export default function RootLayout({
   children,
 }: {
-  children: React.ReactNode
+  children: React.ReactNode;
 }) {
   return (
     <html lang="en">
-      <body className={inter.className}>{children}</body>
+      <body>
+        {/* By wrapping here, every page and component can use the useAuth() hook */}
+        <AuthProvider>
+          {children}
+        </AuthProvider>
+      </body>
     </html>
-  )
+  );
 }
