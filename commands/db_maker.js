@@ -1,4 +1,4 @@
-// THIS FILE CAN CREATE OR DELETE THE DATABASE, TABLE, OR USER CREDENTIALS
+// THIS SCRIPT CAN CREATE OR DELETE SPECIFIC PARTS OF THE DATABASE SETUP.
 
 const mysql = require('mysql2/promise');
 const bcrypt = require('bcryptjs');
@@ -24,19 +24,43 @@ const dbConfig = {
 // --------------------------------------------------------------------------------------
 
 /**
- * Parses command line arguments in the format --key=value
+ * Parses command line arguments. Handles both --key=value and --flag formats.
  * @returns {object} An object containing the parsed arguments.
  */
 function parseArgs() {
     const args = {};
     process.argv.slice(2).forEach(arg => {
         if (arg.startsWith('--')) {
-            const [key, value] = arg.substring(2).split('=');
-            args[key] = value;
+            const argWithoutDashes = arg.substring(2);
+            const [key, value] = argWithoutDashes.split('=');
+            // If there's no value, treat it as a boolean flag (e.g., --help)
+            args[key] = value === undefined ? true : value;
         }
     });
     return args;
 }
+
+/**
+ * Displays the help/usage message.
+ */
+function showUsage() {
+    console.log(`
+    Usage: node commands/db_maker.js [command]
+
+    Commands:
+      --help            Shows this help message.
+
+      --create=all      Creates the database, the table, and the admin user.
+      --create=db       Creates only the database.
+      --create=table    Creates only the table (database must exist).
+      --create=cred     Creates only the admin user (db and table must exist).
+
+      --delete=db       Deletes the entire database.
+      --delete=table    Deletes the user table.
+      --delete=cred     Deletes the admin user credential.
+    `);
+}
+
 
 /**
  * The main function that decides which action to take.
@@ -44,60 +68,107 @@ function parseArgs() {
 async function main() {
     const args = parseArgs();
 
-    if (args.delete === 'db') {
-        await deleteDatabase();
-    } else if (args.delete === 'table') {
-        await deleteTable();
-    } else if (args.delete === 'cred') {
-        // NOTE: This deletes the user specified in the `newUser` constant above.
-        await deleteUser(newUser.username);
+    // Check for the --help flag first. This has top priority.
+    if (args.help) {
+        return showUsage();
+    }
+
+    if (args.create) {
+        switch (args.create) {
+            case 'all': return await setupAll();
+            case 'db': return await createDb();
+            case 'table': return await createTable();
+            case 'cred': return await createUser(newUser);
+            default: showUsage();
+        }
+    } else if (args.delete) {
+        switch (args.delete) {
+            case 'db': return await deleteDatabase();
+            case 'table': return await deleteTable();
+            case 'cred': return await deleteUser(newUser.username);
+            default: showUsage();
+        }
     } else {
-        // Default action: setup everything if no valid flags are provided
-        await setupDatabaseAndCreateUser();
+        // Default action if no valid arguments are given
+        showUsage();
     }
 }
 
-/**
- * ACTION: Sets up the database, table, and user.
- */
-async function setupDatabaseAndCreateUser() {
+
+// --- ATOMIC CREATE FUNCTIONS ---
+
+async function createDb() {
     let connection;
     try {
         console.log('Connecting to the MySQL server...');
         connection = await mysql.createConnection(dbConfig);
-        console.log(`Ensuring database '${DBNAME}' exists...`);
+        console.log(`Attempting to create database: '${DBNAME}'...`);
         await connection.query(`CREATE DATABASE IF NOT EXISTS \`${DBNAME}\`;`);
-        await connection.query(`USE \`${DBNAME}\`;`);
-        console.log(`Database '${DBNAME}' is ready.`);
-
-        const createTableQuery = `CREATE TABLE IF NOT EXISTS \`${TABLENAME}\` (id INT AUTO_INCREMENT PRIMARY KEY, username VARCHAR(50) NOT NULL UNIQUE, password VARCHAR(255) NOT NULL, full_name VARCHAR(255), created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP);`;
-        console.log(`Ensuring '${TABLENAME}' table exists...`);
-        await connection.query(createTableQuery);
-        console.log(`'${TABLENAME}' table is ready.`);
-
-        console.log(`Hashing password: ${newUser.password}`);
-        const hashedPassword = await bcrypt.hash(newUser.password, saltRounds = 10);
-        console.log('Password hashed successfully.');
-
-        console.log(`Inserting user '${newUser.username}'...`);
-        const insertQuery = `INSERT INTO \`${TABLENAME}\` (username, password, full_name) VALUES (?, ?, ?)`;
-        await connection.execute(insertQuery, [newUser.username, hashedPassword, newUser.fullName]);
-
-        console.log(`\n✅ SUCCESS! User '${newUser.username}' was created in table '${TABLENAME}'.`);
+        console.log(`\n✅ SUCCESS! Database '${DBNAME}' is ready.`);
     } catch (error) {
-        if (error.code === 'ER_DUP_ENTRY') {
-            console.error(`\n❌ INFO: The user '${newUser.username}' already exists. No changes made.`);
+        console.error('\n❌ An error occurred:', error.message);
+    } finally {
+        if (connection) await connection.end();
+    }
+}
+
+async function createTable() {
+    let connection;
+    try {
+        const dbWithDbName = { ...dbConfig, database: DBNAME };
+        console.log(`Connecting to database '${DBNAME}'...`);
+        connection = await mysql.createConnection(dbWithDbName);
+        const createTableQuery = `CREATE TABLE IF NOT EXISTS \`${TABLENAME}\` (id INT AUTO_INCREMENT PRIMARY KEY, username VARCHAR(50) NOT NULL UNIQUE, password VARCHAR(255) NOT NULL, full_name VARCHAR(255), created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP);`;
+        console.log(`Attempting to create table: '${TABLENAME}'...`);
+        await connection.query(createTableQuery);
+        console.log(`\n✅ SUCCESS! Table '${TABLENAME}' is ready.`);
+    } catch (error) {
+        if (error.code === 'ER_BAD_DB_ERROR') {
+             console.error(`\n❌ ERROR: Cannot create table because database '${DBNAME}' does not exist. Run --create=db first.`);
         } else {
-            console.error('\n❌ An error occurred during setup:', error.message);
+            console.error('\n❌ An error occurred:', error.message);
         }
     } finally {
         if (connection) await connection.end();
     }
 }
 
-/**
- * ACTION: Deletes the entire database.
- */
+async function createUser(user) {
+    let connection;
+    try {
+        const dbWithDbName = { ...dbConfig, database: DBNAME };
+        console.log(`Connecting to database '${DBNAME}'...`);
+        connection = await mysql.createConnection(dbWithDbName);
+        console.log(`Hashing password for user: ${user.username}`);
+        const hashedPassword = await bcrypt.hash(user.password, 10);
+        console.log(`Attempting to insert user: '${user.username}'...`);
+        const insertQuery = `INSERT INTO \`${TABLENAME}\` (username, password, full_name) VALUES (?, ?, ?)`;
+        await connection.execute(insertQuery, [user.username, hashedPassword, user.fullName]);
+        console.log(`\n✅ SUCCESS! User '${user.username}' was created.`);
+    } catch (error) {
+        if (error.code === 'ER_DUP_ENTRY') {
+            console.error(`\n❌ INFO: The user '${user.username}' already exists.`);
+        } else if (error.code === 'ER_BAD_DB_ERROR' || error.code === 'ER_NO_SUCH_TABLE') {
+             console.error(`\n❌ ERROR: Database or table does not exist. Run --create=all or --create=table first.`);
+        } else {
+            console.error('\n❌ An error occurred:', error.message);
+        }
+    } finally {
+        if (connection) await connection.end();
+    }
+}
+
+async function setupAll() {
+    console.log("--- Starting full setup: DB -> Table -> User ---");
+    await createDb();
+    await createTable();
+    await createUser(newUser);
+    console.log("\n--- Full setup complete! ---");
+}
+
+
+// --- ATOMIC DELETE FUNCTIONS (Unchanged) ---
+
 async function deleteDatabase() {
     let connection;
     try {
@@ -113,9 +184,6 @@ async function deleteDatabase() {
     }
 }
 
-/**
- * ACTION: Deletes the user table.
- */
 async function deleteTable() {
     let connection;
     try {
@@ -126,7 +194,6 @@ async function deleteTable() {
         await connection.query(`DROP TABLE IF EXISTS \`${TABLENAME}\`;`);
         console.log(`\n✅ SUCCESS! Table '${TABLENAME}' was deleted from database '${DBNAME}'.`);
     } catch (error) {
-        // Handle case where the database itself doesn't exist
         if (error.code === 'ER_BAD_DB_ERROR') {
              console.error(`\n❌ ERROR: Cannot delete table because database '${DBNAME}' does not exist.`);
         } else {
@@ -137,10 +204,6 @@ async function deleteTable() {
     }
 }
 
-/**
- * ACTION: Deletes a specific user credential from the table.
- * @param {string} username The username to delete.
- */
 async function deleteUser(username) {
     let connection;
     try {
@@ -149,17 +212,14 @@ async function deleteUser(username) {
         connection = await mysql.createConnection(dbWithDbName);
         console.log(`Attempting to delete user: '${username}'...`);
         const [result] = await connection.execute(`DELETE FROM \`${TABLENAME}\` WHERE username = ?;`, [username]);
-        
         if (result.affectedRows > 0) {
             console.log(`\n✅ SUCCESS! User '${username}' was deleted.`);
         } else {
             console.log(`\nℹ️ INFO: User '${username}' not found. No changes made.`);
         }
     } catch (error) {
-        if (error.code === 'ER_BAD_DB_ERROR') {
-             console.error(`\n❌ ERROR: Cannot delete user because database '${DBNAME}' does not exist.`);
-        } else if (error.code === 'ER_NO_SUCH_TABLE') {
-            console.error(`\n❌ ERROR: Cannot delete user because table '${TABLENAME}' does not exist.`);
+        if (error.code === 'ER_BAD_DB_ERROR' || error.code === 'ER_NO_SUCH_TABLE') {
+             console.error(`\n❌ ERROR: Database or table does not exist.`);
         } else {
             console.error('\n❌ An error occurred while deleting the user:', error.message);
         }
