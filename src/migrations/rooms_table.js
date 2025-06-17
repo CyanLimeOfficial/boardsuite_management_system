@@ -21,8 +21,15 @@ CREATE TABLE IF NOT EXISTS rooms (
     capacity TINYINT UNSIGNED NOT NULL DEFAULT 1,
     status ENUM('Available', 'Occupied', 'Under Maintenance') NOT NULL DEFAULT 'Available',
     rate_per_month DECIMAL(10, 2) NOT NULL,
+    -- Column to link to the 'users' table
+    user_id INT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    -- The foreign key constraint with cascade delete
+    CONSTRAINT fk_room_user
+        FOREIGN KEY (user_id)
+        REFERENCES users(id)
+        ON DELETE CASCADE
 );
 `;
 
