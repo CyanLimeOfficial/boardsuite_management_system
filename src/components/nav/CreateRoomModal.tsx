@@ -28,9 +28,22 @@ export default function CreateRoomModal({ isOpen, onClose, onRoomCreated }: Crea
     setError(null);
 
     try {
+      // --- THIS IS THE FIX ---
+      // 1. Get the authentication token from the browser's localStorage.
+      const token = localStorage.getItem('authToken');
+      if (!token) {
+        // If no token is found, the user is not logged in. Stop the process.
+        throw new Error('You must be logged in to create a room.');
+      }
+
+      // 2. Send the request with the Authorization header.
       const response = await fetch('/api/dashboard/rooms', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          // This line securely sends the user's "key" to the backend.
+          'Authorization': `Bearer ${token}` 
+        },
         body: JSON.stringify({
           room_number: roomNumber,
           description: description,
@@ -79,7 +92,7 @@ export default function CreateRoomModal({ isOpen, onClose, onRoomCreated }: Crea
               <label htmlFor="rate" className="block text-sm font-medium text-gray-900">Rate per Month (₱)</label>
               <input type="number" id="rate" min="0" step="0.01" value={rate} onChange={(e) => setRate(e.target.value)} required className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-gray-900" />
             </div>
-             <div>
+            <div>
               <label htmlFor="description" className="block text-sm font-medium text-gray-900">Description (Optional)</label>
               <textarea id="description" value={description} onChange={(e) => setDescription(e.target.value)} rows={3} className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-gray-900"></textarea>
             </div>

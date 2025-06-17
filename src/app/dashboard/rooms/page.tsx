@@ -1,8 +1,9 @@
-// app/rooms/page.tsx
+// src/app/dashboard/rooms/page.tsx
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
-import CreateRoomModal from '@/components/nav/CreateRoomModal';
+import CreateRoomModal from '@/components/nav/CreateRoomModal'; // The "Create" modal
+import RoomDetailsModal from '@/components/nav/RoomDetailsModal'; // The "Details/Edit" modal
 
 // --- ICONS ---
 const BedIcon = (props: React.SVGProps<SVGSVGElement>) => (
@@ -16,8 +17,7 @@ const UsersIcon = (props: React.SVGProps<SVGSVGElement>) => (
   </svg>
 );
 
-
-// --- Room Interface ---
+// The interface now includes the optional occupant name from the API's JOIN
 interface Room {
   id: number;
   room_number: string;
@@ -25,9 +25,9 @@ interface Room {
   status: 'Available' | 'Occupied' | 'Under Maintenance';
   capacity: number;
   rate_per_month: number;
+  occupant_name: string | null;
 }
 
-// --- getStatusClasses helper ---
 const getStatusClasses = (status: string) => {
   switch (status) {
     case 'Available': return { bg: 'bg-green-100', text: 'text-green-800', dot: 'bg-green-500' };
@@ -41,15 +41,21 @@ export default function RoomsPage() {
   const [rooms, setRooms] = useState<Room[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [isModalOpen, setIsModalOpen] = useState(false);
+
+  // State for the "Create" modal
+  const [isCreateModalOpen, setCreateModalOpen] = useState(false);
+  
+  // State for the "Details/Edit" modal
+  const [selectedRoom, setSelectedRoom] = useState<Room | null>(null);
 
   const fetchRooms = useCallback(async () => {
     try {
       setIsLoading(true);
       setError(null);
-      // --- FIX: Updated the API endpoint URL ---
       const response = await fetch('/api/dashboard/rooms');
-      if (!response.ok) throw new Error('Failed to fetch rooms from the server.');
+      if (!response.ok) {
+        throw new Error('Failed to fetch rooms from the server.');
+      }
       const data = await response.json();
       setRooms(data);
     } catch (err: any) {
@@ -63,16 +69,29 @@ export default function RoomsPage() {
     fetchRooms();
   }, [fetchRooms]);
 
+  // Handler to close the details modal and clear the selection
+  const handleCloseDetailsModal = () => {
+    setSelectedRoom(null);
+  };
+
   const totalRooms = rooms.length;
   const availableRooms = rooms.filter(r => r.status === 'Available').length;
   const occupiedRooms = rooms.filter(r => r.status === 'Occupied').length;
 
   return (
     <div className="p-4 md:p-6 lg:p-8 bg-gray-50 min-h-screen">
+      {/* --- RENDER BOTH MODALS --- */}
       <CreateRoomModal 
-        isOpen={isModalOpen}
-        onClose={() => setIsModalOpen(false)}
+        isOpen={isCreateModalOpen}
+        onClose={() => setCreateModalOpen(false)}
         onRoomCreated={fetchRooms}
+      />
+      <RoomDetailsModal
+        isOpen={selectedRoom !== null}
+        onClose={handleCloseDetailsModal}
+        room={selectedRoom}
+        onRoomUpdated={fetchRooms}
+        onRoomDeleted={fetchRooms}
       />
 
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6">
@@ -81,22 +100,23 @@ export default function RoomsPage() {
           <p className="mt-1 text-gray-600">Overview of all rooms in the boarding house.</p>
         </div>
         <button 
-          onClick={() => setIsModalOpen(true)}
-          className="mt-4 md:mt-0 bg-blue-600 text-white font-semibold py-2 px-4 rounded-lg shadow-md hover:bg-blue-700 transition duration-300"
+            onClick={() => setCreateModalOpen(true)} 
+            className="mt-4 md:mt-0 bg-blue-600 text-white font-semibold py-2 px-4 rounded-lg shadow-md hover:bg-blue-700 transition duration-300"
         >
           + Create New Room
         </button>
       </div>
 
+      {/* --- SUMMARY STATS --- */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
         <div className="bg-white p-4 rounded-lg shadow"><h3 className="text-sm font-medium text-gray-500">Total Rooms</h3><p className="mt-1 text-3xl font-semibold text-gray-900">{totalRooms}</p></div>
         <div className="bg-white p-4 rounded-lg shadow"><h3 className="text-sm font-medium text-gray-500">Available</h3><p className="mt-1 text-3xl font-semibold text-green-600">{availableRooms}</p></div>
         <div className="bg-white p-4 rounded-lg shadow"><h3 className="text-sm font-medium text-gray-500">Occupied</h3><p className="mt-1 text-3xl font-semibold text-red-600">{occupiedRooms}</p></div>
       </div>
       
-      {isLoading && <p className="text-center text-gray-500">Loading rooms...</p>}
-      {error && <p className="text-center text-red-500">Error: {error}</p>}
-
+      {isLoading && <p className="text-center text-gray-500 py-10">Loading rooms...</p>}
+      {error && <p className="text-center text-red-600 py-10">Error: {error}</p>}
+      
       {!isLoading && !error && (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
           {rooms.map((room) => {
@@ -118,12 +138,14 @@ export default function RoomsPage() {
                   <div className="mt-6 border-t border-gray-200 pt-4">
                     <div className="flex items-center justify-between text-sm text-gray-600">
                        <div className="flex items-center"><BedIcon className="h-5 w-5 mr-2 text-gray-400" /><span>Capacity: {room.capacity}</span></div>
-                       <div className="flex items-center"><UsersIcon className="h-5 w-5 mr-2 text-gray-400" /><span>Occupant: None</span></div>
+                       <div className="flex items-center"><UsersIcon className="h-5 w-5 mr-2 text-gray-400" /><span>Occupant: {room.occupant_name || 'None'}</span></div>
                     </div>
                   </div>
                 </div>
                 <div className="bg-gray-50 px-5 py-3">
-                  <button className="w-full text-sm font-medium text-blue-600 hover:text-blue-800">View Details</button>
+                  <button onClick={() => setSelectedRoom(room)} className="w-full text-sm font-medium text-blue-600 hover:text-blue-800">
+                    View Details
+                  </button>
                 </div>
               </div>
             );
