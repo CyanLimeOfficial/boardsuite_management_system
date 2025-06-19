@@ -2,8 +2,8 @@
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
-import CreateRoomModal from '@/components/nav/CreateRoomModal'; // The "Create" modal
-import RoomDetailsModal from '@/components/nav/RoomDetailsModal'; // The "Details/Edit" modal
+import CreateRoomModal from '@/components/nav/CreateRoom'; // The "Create" modal
+import RoomDetailsModal from '@/components/nav/RoomDetails'; // The "Details/Edit" modal
 
 // --- ICONS ---
 const BedIcon = (props: React.SVGProps<SVGSVGElement>) => (

@@ -1,4 +1,4 @@
-// app/api/rooms/available/route.ts
+// app/api/dashboard/rooms/available/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import getPool from '@/library/db';
 import jwt from 'jsonwebtoken';

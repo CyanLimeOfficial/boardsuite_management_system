@@ -21,9 +21,9 @@ const createTableQuery = `
         address TEXT NULL,
         emergency_contact_name VARCHAR(255) NULL,
         emergency_contact_number VARCHAR(20) NULL,
-        -- Column to link to the 'rooms' table
-        room_id INT UNIQUE,
+        room_id INT NULL,
         registration_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        last_payment_date DATE NULL, 
         -- The foreign key constraint with ON DELETE SET NULL
         CONSTRAINT fk_tenant_room
             FOREIGN KEY (room_id)
@@ -44,7 +44,7 @@ async function createTenantsTable() {
 
         console.log('Attempting to create "tenants" table...');
         await connection.execute(createTableQuery);
-        console.log('✅ SUCCESS! "tenants" table is ready.');
+        console.log('✅ SUCCESS! "tenants" table is ready with payment tracking.');
 
     } catch (error) {
         console.error('❌ ERROR creating the tenants table:', error.message);
