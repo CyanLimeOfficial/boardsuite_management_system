@@ -9,7 +9,7 @@ interface Bill {
     tenant_id: number;
     tenant_name: string;
     room_number: string;
-    amount_due: number;
+    amount_due: number | string; 
     bill_date: string;
     due_date: string;
     status: 'Pending' | 'Paid' | 'Partially Paid' | 'Overdue';
@@ -30,18 +30,16 @@ export default function BillingPage() {
     const [error, setError] = useState<string | null>(null);
     const [isGenerating, setIsGenerating] = useState(false);
     
-    // State for the "Record Payment" modal
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [selectedBill, setSelectedBill] = useState<Bill | null>(null);
     const [paymentFormData, setPaymentFormData] = useState<PaymentFormData>({
         bill_id: null,
         amount_paid: '',
-        payment_date: new Date().toISOString().split('T')[0], // Default to today
+        payment_date: new Date().toISOString().split('T')[0],
         payment_method: 'Cash',
         notes: ''
     });
 
-    // --- Data Fetching ---
     const fetchBills = useCallback(async () => {
         setLoading(true);
         try {
@@ -63,9 +61,8 @@ export default function BillingPage() {
         fetchBills();
     }, [fetchBills]);
 
-    // --- Action Handlers ---
     const handleGenerateBills = async () => {
-        if (!confirm('Are you sure you want to generate monthly bills for all active tenants? This will not create duplicates.')) {
+        if (!confirm('Are you sure you want to generate bills for all due tenants?')) {
             return;
         }
         setIsGenerating(true);
@@ -78,8 +75,8 @@ export default function BillingPage() {
             });
             const data = await response.json();
             if (!response.ok) throw new Error(data.message || 'Failed to generate bills.');
-            alert(data.message); // Show success message
-            await fetchBills(); // Refresh the list
+            alert(data.message);
+            await fetchBills();
         } catch (err: any) {
             setError(err.message);
         } finally {
@@ -103,19 +100,18 @@ export default function BillingPage() {
             
             alert('Payment recorded successfully!');
             closeModal();
-            await fetchBills(); // Refresh the list
+            await fetchBills();
 
         } catch (err: any) {
              alert(`Error: ${err.message}`);
         }
     };
 
-    // --- Modal Controls ---
     const openModal = (bill: Bill) => {
         setSelectedBill(bill);
         setPaymentFormData({
             bill_id: bill.id,
-            amount_paid: bill.amount_due.toString(), // Pre-fill with full amount
+            amount_paid: bill.amount_due.toString(),
             payment_date: new Date().toISOString().split('T')[0],
             payment_method: 'Cash',
             notes: ''
@@ -128,7 +124,6 @@ export default function BillingPage() {
         setSelectedBill(null);
     };
 
-    // --- Render ---
     return (
         <div className="p-4 md:p-8 bg-gray-50 min-h-screen">
             <header className="mb-8">
@@ -145,7 +140,7 @@ export default function BillingPage() {
                     disabled={isGenerating}
                     className="bg-blue-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50 disabled:bg-blue-300 transition-colors"
                 >
-                    {isGenerating ? 'Generating...' : 'Generate Monthly Bills'}
+                    {isGenerating ? 'Generating...' : 'Generate Due Bills'}
                 </button>
             </div>
             
@@ -169,11 +164,11 @@ export default function BillingPage() {
                                 </tr>
                             </thead>
                             <tbody>
-                                {bills.map(bill => (
+                                {Array.isArray(bills) && bills.map(bill => (
                                     <tr key={bill.id} className="border-b hover:bg-gray-50">
                                         <td className="px-6 py-4 font-medium text-gray-800">{bill.tenant_name}</td>
                                         <td className="px-6 py-4 text-gray-600">{bill.room_number}</td>
-                                        <td className="px-6 py-4 text-gray-800">₱{bill.amount_due.toFixed(2)}</td>
+                                        <td className="px-6 py-4 text-gray-800">₱{parseFloat(bill.amount_due as string).toFixed(2)}</td>
                                         <td className="px-6 py-4 text-gray-600">{new Date(bill.bill_date).toLocaleDateString()}</td>
                                         <td className="px-6 py-4">
                                             <span className={`px-3 py-1 text-xs font-semibold rounded-full ${
@@ -201,7 +196,6 @@ export default function BillingPage() {
                 )}
             </div>
             
-            {/* Record Payment Modal */}
             {isModalOpen && selectedBill && (
                 <div className="fixed inset-0 bg-black/60 flex justify-center items-center z-50 p-4">
                     <div className="bg-white rounded-xl shadow-2xl w-full max-w-md">
@@ -213,15 +207,16 @@ export default function BillingPage() {
                                 <div className="space-y-4">
                                     <div>
                                         <label htmlFor="amount_paid" className="block text-sm font-medium text-gray-700">Amount Paid</label>
-                                        <input type="number" id="amount_paid" value={paymentFormData.amount_paid} onChange={e => setPaymentFormData({...paymentFormData, amount_paid: e.target.value})} required className="mt-1 block w-full border-gray-300 rounded-md shadow-sm"/>
+                                        {/* --- STYLE FIX APPLIED HERE --- */}
+                                        <input type="number" id="amount_paid" value={paymentFormData.amount_paid} onChange={e => setPaymentFormData({...paymentFormData, amount_paid: e.target.value})} required className="mt-1 block w-full border-gray-300 rounded-md shadow-sm text-gray-900"/>
                                     </div>
                                      <div>
                                         <label htmlFor="payment_date" className="block text-sm font-medium text-gray-700">Payment Date</label>
-                                        <input type="date" id="payment_date" value={paymentFormData.payment_date} onChange={e => setPaymentFormData({...paymentFormData, payment_date: e.target.value})} required className="mt-1 block w-full border-gray-300 rounded-md shadow-sm"/>
+                                        <input type="date" id="payment_date" value={paymentFormData.payment_date} onChange={e => setPaymentFormData({...paymentFormData, payment_date: e.target.value})} required className="mt-1 block w-full border-gray-300 rounded-md shadow-sm text-gray-900"/>
                                     </div>
                                     <div>
                                         <label htmlFor="payment_method" className="block text-sm font-medium text-gray-700">Payment Method</label>
-                                        <select id="payment_method" value={paymentFormData.payment_method} onChange={e => setPaymentFormData({...paymentFormData, payment_method: e.target.value as any})} required className="mt-1 block w-full border-gray-300 rounded-md shadow-sm">
+                                        <select id="payment_method" value={paymentFormData.payment_method} onChange={e => setPaymentFormData({...paymentFormData, payment_method: e.target.value as any})} required className="mt-1 block w-full border-gray-300 rounded-md shadow-sm text-gray-900">
                                             <option>Cash</option>
                                             <option>Bank Transfer</option>
                                             <option>GCash</option>
@@ -231,7 +226,7 @@ export default function BillingPage() {
                                     </div>
                                     <div>
                                         <label htmlFor="notes" className="block text-sm font-medium text-gray-700">Notes (Optional)</label>
-                                        <textarea id="notes" value={paymentFormData.notes} onChange={e => setPaymentFormData({...paymentFormData, notes: e.target.value})} rows={2} className="mt-1 block w-full border-gray-300 rounded-md shadow-sm"></textarea>
+                                        <textarea id="notes" value={paymentFormData.notes} onChange={e => setPaymentFormData({...paymentFormData, notes: e.target.value})} rows={2} className="mt-1 block w-full border-gray-300 rounded-md shadow-sm text-gray-900"></textarea>
                                     </div>
                                 </div>
                             </div>
