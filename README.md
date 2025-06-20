@@ -72,6 +72,12 @@ To perform the complete initial setup (database, table, and admin user), run the
 node commands/db_maker.js --create=all
 ```
 
+### **Migrate all tables**
+To perform the complete initial setup of all tables needed:
+```bash
+npm run migrate
+```
+
 
 ## Learn More
 
