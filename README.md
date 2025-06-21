@@ -73,7 +73,7 @@ node commands/db_maker.js --create=all
 ```
 
 ### **Migrate all tables**
-To perform the complete initial setup of all tables needed:
+To perform the complete initial setup of all tables needed for the system to run:
 ```bash
 npm run migrate
 ```
