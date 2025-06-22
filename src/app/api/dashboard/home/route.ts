@@ -1,60 +1,64 @@
-// In file: app/api/dashboard/stats/route.ts
+// In file: app/api/dashboard/reports/summarize/route.ts
 
 import { NextResponse } from 'next/server';
-import getPool from '@/library/db'; // Use your actual path to the db utility
 import { verify } from 'jsonwebtoken';
 
-export async function GET(request: Request) {
+export async function POST(request: Request) {
     try {
-        // --- Authentication ---
         const token = request.headers.get('authorization')?.split(' ')[1];
         if (!token) {
             return new NextResponse(JSON.stringify({ message: 'Authentication required' }), { status: 401 });
         }
         verify(token, process.env.JWT_SECRET || 'YOUR_SECRET_KEY');
 
-        const pool = getPool();
+        const reportData = await request.json();
+        const { monthlySales, totalPending, payments, pendingBills, reportMonth } = reportData;
         
-        // --- Execute all queries in parallel for efficiency ---
-        const [
-            tenantsResult,
-            roomsResult,
-            pendingResult,
-            revenueResult
-        ] = await Promise.all([
-            // 1. Get total number of tenants
-            pool.query("SELECT COUNT(*) as totalTenants FROM tenants"),
+        if (!reportData) {
+             return new NextResponse(JSON.stringify({ message: 'Report data is required.' }), { status: 400 });
+        }
 
-            // 2. Get occupied and total rooms
-            pool.query("SELECT COUNT(CASE WHEN status = 'Occupied' THEN 1 END) as occupiedRooms, COUNT(*) as totalRooms FROM rooms"),
+        // --- Construct a detailed prompt for the AI ---
+        const prompt = `
+            You are a financial analyst for a property manager in Caibiran, Eastern Visayas, Philippines.
+            Your task is to write a concise, professional summary statement based on the following financial data for ${reportMonth}.
+            The current date is Sunday, June 22, 2025.
 
-            // 3. Get total pending payments from all unpaid bills
-            pool.query("SELECT COUNT(*) as pendingCount, SUM(amount_due) as pendingAmount FROM bills WHERE status IN ('Pending', 'Partially Paid', 'Overdue')"),
+            Financial Data:
+            - Total Sales This Month: PHP ${monthlySales.toFixed(2)} from ${payments.length} payments.
+            - Total Outstanding Dues (All Months): PHP ${totalPending.toFixed(2)} from ${pendingBills.length} tenants.
 
-            // 4. Get revenue for the current month
-            pool.query("SELECT SUM(amount_paid) as monthlyRevenue FROM payments WHERE YEAR(payment_date) = YEAR(CURDATE()) AND MONTH(payment_date) = MONTH(CURDATE())")
-        ]);
+            Based on this data, generate a one-paragraph summary. Start with a clear overview of the month's performance. Mention the total sales and then comment on the total outstanding dues. Maintain a professional and slightly formal tone. Conclude with a forward-looking or concluding remark.
+        `;
 
-        // --- Extract and process results ---
-        const totalTenants = (tenantsResult[0] as any[])[0].totalTenants || 0;
-        const { occupiedRooms, totalRooms } = (roomsResult[0] as any[])[0];
-        const { pendingCount, pendingAmount } = (pendingResult[0] as any[])[0];
-        const monthlyRevenue = (revenueResult[0] as any[])[0].monthlyRevenue || 0;
-        
-        // --- Combine into a single stats object ---
-        const stats = {
-            totalTenants,
-            occupiedRooms: occupiedRooms || 0,
-            totalRooms: totalRooms || 0,
-            pendingCount: pendingCount || 0,
-            pendingAmount: pendingAmount || 0,
-            monthlyRevenue: monthlyRevenue || 0,
+        const payload = {
+            contents: [{ role: "user", parts: [{ text: prompt }] }],
         };
 
-        return NextResponse.json(stats);
+        const apiKey = ""; // Leave blank
+        const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
+
+        const apiResponse = await fetch(apiUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+
+        if (!apiResponse.ok) {
+            const errorData = await apiResponse.json();
+            throw new Error(errorData.error?.message || "An unknown AI model error occurred.");
+        }
+
+        const result = await apiResponse.json();
+
+        if (result.candidates?.[0]?.content?.parts?.[0]?.text) {
+             return NextResponse.json({ summary: result.candidates[0].content.parts[0].text });
+        } else {
+            throw new Error("The AI model did not return a valid summary.");
+        }
 
     } catch (error: any) {
-        console.error('API Error in /dashboard/stats:', error);
-        return new NextResponse(JSON.stringify({ message: 'Internal Server Error' }), { status: 500 });
+        console.error('API Error in /dashboard/reports/summarize:', error);
+        return new NextResponse(JSON.stringify({ message: 'Internal Server Error', error: error.message }), { status: 500 });
     }
 }

@@ -11,6 +11,17 @@ export async function POST(request: Request) {
         }
         verify(token, process.env.JWT_SECRET || 'YOUR_SECRET_KEY');
 
+        // --- FIX: Securely get the API key from environment variables ---
+        // On the server, API keys must be stored securely, not left blank.
+        // You need to create a .env.local file in your project's root folder
+        // and add your Google AI API key like this:
+        // GEMINI_API_KEY=YOUR_API_KEY_HERE
+        const apiKey = process.env.GEMINI_API_KEY;
+
+        if (!apiKey) {
+            throw new Error("GEMINI_API_KEY is not configured in the environment variables.");
+        }
+
         const reportData = await request.json();
         const { monthlySales, totalPending, payments, pendingBills, reportMonth } = reportData;
         
@@ -18,15 +29,18 @@ export async function POST(request: Request) {
              return new NextResponse(JSON.stringify({ message: 'Report data is required.' }), { status: 400 });
         }
 
+        const sales = parseFloat(monthlySales) || 0;
+        const pending = parseFloat(totalPending) || 0;
+
         // --- Construct a detailed prompt for the AI ---
         const prompt = `
             You are a financial analyst for a property manager in Naval, Eastern Visayas, Philippines.
             Your task is to write a concise, professional summary statement based on the following financial data for ${reportMonth}.
-            The current date is ${new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}.
+            The current date is Sunday, June 22, 2025 at 11:57 PM.
 
             Financial Data:
-            - Total Sales This Month: PHP ${monthlySales.toFixed(2)} from ${payments.length} payments.
-            - Total Outstanding Dues (All Months): PHP ${totalPending.toFixed(2)} from ${pendingBills.length} tenants.
+            - Total Sales This Month: PHP ${sales.toFixed(2)} from ${payments.length} payments.
+            - Total Outstanding Dues (All Months): PHP ${pending.toFixed(2)} from ${pendingBills.length} tenants.
 
             Based on this data, generate a one-paragraph summary. Start with a clear overview of the month's performance. Mention the total sales and then comment on the total outstanding dues. Maintain a professional and slightly formal tone. Conclude with a forward-looking or concluding remark.
         `;
@@ -35,7 +49,6 @@ export async function POST(request: Request) {
             contents: [{ role: "user", parts: [{ text: prompt }] }],
         };
 
-        const apiKey = ""; // Leave blank
         const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
 
         const apiResponse = await fetch(apiUrl, {
