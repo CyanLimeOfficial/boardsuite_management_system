@@ -3,7 +3,7 @@
 import React from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Home, Users, BedDouble, Receipt, LineChart, Building2 } from 'lucide-react';
+import { Home, Users, BedDouble, Receipt, LineChart, Settings, Building2 } from 'lucide-react';
 
 
 const NavLink = ({ href, icon, children }: { href: string; icon: React.ReactNode; children: React.ReactNode }) => {
@@ -47,6 +47,11 @@ export default function Sidebar() {
           Reports
         </NavLink>
       </nav>
+      <div className="mt-auto flex flex-col gap-1">
+        <NavLink href="/dashboard/settings" icon={<Settings className="h-4 w-4" />}>
+          Settings
+        </NavLink>
+      </div>
     </aside>
   );
 }
