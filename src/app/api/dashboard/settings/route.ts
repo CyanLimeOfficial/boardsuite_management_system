@@ -3,31 +3,37 @@
 import { NextResponse } from 'next/server';
 import getPool from '@/library/db';
 import { verify } from 'jsonwebtoken';
+import bcrypt from 'bcryptjs';
 
-// --- GET Handler: Fetches the current settings ---
+// --- GET Handler: Fetches combined settings and user data ---
 export async function GET(request: Request) {
     try {
         const token = request.headers.get('authorization')?.split(' ')[1];
         if (!token) {
             return new NextResponse(JSON.stringify({ message: 'Authentication required' }), { status: 401 });
         }
-        verify(token, process.env.JWT_SECRET || 'YOUR_SECRET_KEY');
+        const decoded = verify(token, process.env.JWT_SECRET || 'YOUR_SECRET_KEY') as { id: number };
+        const adminUserId = decoded.id;
 
         const pool = getPool();
-        // The settings table is designed to have only one row with id = 1.
-        const sql = "SELECT * FROM settings WHERE id = 1 LIMIT 1";
-        const [rows] = await pool.query(sql);
-
-        const settings = (rows as any[])[0] || {};
         
-        // Parse payment_methods from JSON string to an array for the client
-        if (settings.payment_methods) {
-            settings.payment_methods = JSON.parse(settings.payment_methods);
-        } else {
-            settings.payment_methods = [];
+        // Fetch both settings and user data in parallel
+        const [settingsResult, userResult] = await Promise.all([
+            pool.query("SELECT boarding_house_name, business_address, contact_phone, contact_email, gemini_api_key FROM settings WHERE id = 1 LIMIT 1"),
+            pool.query("SELECT id, username, full_name FROM users WHERE id = ?", [adminUserId])
+        ]);
+
+        const settings = (settingsResult[0] as any[])[0] || {};
+        const user = (userResult[0] as any[])[0];
+
+        if (!user) {
+            return new NextResponse(JSON.stringify({ message: 'User not found.' }), { status: 404 });
         }
 
-        return NextResponse.json(settings);
+        // Combine data into a single object for the client
+        const responseData = { ...settings, ...user };
+
+        return NextResponse.json(responseData);
 
     } catch (error: any) {
         console.error('API GET Error:', error);
@@ -35,7 +41,7 @@ export async function GET(request: Request) {
     }
 }
 
-// --- PUT Handler: Updates the settings ---
+// --- PUT Handler: Updates settings and user data ---
 export async function PUT(request: Request) {
     try {
         const token = request.headers.get('authorization')?.split(' ')[1];
@@ -46,44 +52,47 @@ export async function PUT(request: Request) {
         const adminUserId = decoded.id;
 
         const body = await request.json();
-
-        // Convert payment_methods array back to a JSON string for database storage
-        const paymentMethodsJson = JSON.stringify(body.payment_methods || []);
+        const { boarding_house_name, business_address, contact_phone, contact_email, gemini_api_key, full_name, new_password } = body;
 
         const pool = getPool();
-        const sql = `
-            UPDATE settings SET
-                user_id = ?,
-                boarding_house_name = ?,
-                business_address = ?,
-                contact_phone = ?,
-                contact_email = ?,
-                currency_symbol = ?,
-                default_due_period = ?,
-                late_fees_enabled = ?,
-                late_fee_type = ?,
-                late_fee_amount = ?,
-                payment_methods = ?,
-                gemini_api_key = ?
-            WHERE id = 1
-        `;
+        const connection = await pool.getConnection();
 
-        await pool.execute(sql, [
-            adminUserId,
-            body.boarding_house_name,
-            body.business_address,
-            body.contact_phone,
-            body.contact_email,
-            body.currency_symbol,
-            body.default_due_period,
-            body.late_fees_enabled,
-            body.late_fee_type,
-            body.late_fee_amount,
-            paymentMethodsJson,
-            body.gemini_api_key
-        ]);
+        try {
+            await connection.beginTransaction();
 
-        return NextResponse.json({ message: 'Settings updated successfully.' });
+            // 1. Update the settings table
+            const settingsSql = `
+                UPDATE settings SET
+                    boarding_house_name = ?,
+                    business_address = ?,
+                    contact_phone = ?,
+                    contact_email = ?,
+                    gemini_api_key = ?
+                WHERE id = 1
+            `;
+            await connection.execute(settingsSql, [boarding_house_name, business_address, contact_phone, contact_email, gemini_api_key]);
+
+            // 2. Update the user's full name
+            const updateUserSql = "UPDATE users SET full_name = ? WHERE id = ?";
+            await connection.execute(updateUserSql, [full_name, adminUserId]);
+
+            // 3. If a new password is provided, hash it and update it
+            if (new_password && new_password.trim() !== '') {
+                const salt = await bcrypt.genSalt(10);
+                const hashedPassword = await bcrypt.hash(new_password, salt);
+                const updatePasswordSql = "UPDATE users SET password = ? WHERE id = ?";
+                await connection.execute(updatePasswordSql, [hashedPassword, adminUserId]);
+            }
+
+            await connection.commit();
+            return NextResponse.json({ message: 'Settings and profile updated successfully.' });
+
+        } catch (error) {
+            await connection.rollback();
+            throw error;
+        } finally {
+            connection.release();
+        }
 
     } catch (error: any) {
         console.error('API PUT Error:', error);

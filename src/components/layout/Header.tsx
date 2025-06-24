@@ -1,3 +1,4 @@
+// In file: components/layout/Header.tsx
 'use client';
 
 import React, { useState, useEffect } from 'react';
@@ -5,16 +6,26 @@ import { UserCircle, Building2 } from 'lucide-react';
 import { useAuth } from '@/app/credentials/AuthCredentials'; 
 
 export default function Header() {
-    const { user, loading: authLoading } = useAuth();
+    // useAuth is still useful for checking the overall login session
+    const { user, loading: authLoading } = useAuth(); 
+    
+    // Local state to hold the most up-to-date names
     const [boardingHouseName, setBoardingHouseName] = useState('My Boarding House');
-    const [settingsLoading, setSettingsLoading] = useState(true);
+    const [displayName, setDisplayName] = useState('');
+    const [dataLoading, setDataLoading] = useState(true);
 
-    // Fetch settings on component mount to get the boarding house name
+    // This useEffect will run on every page load/reload, fetching fresh data.
     useEffect(() => {
-        const fetchSettings = async () => {
+        const fetchHeaderData = async () => {
+            // No need to fetch if we know the user isn't logged in.
+            const token = localStorage.getItem('authToken');
+            if (!token) {
+                setDataLoading(false);
+                return;
+            }
+
             try {
-                // Settings are public or fetched with user's token if needed
-                const token = localStorage.getItem('authToken');
+                // The settings API returns both business and user details.
                 const response = await fetch('/api/dashboard/settings', {
                     headers: { 'Authorization': `Bearer ${token}` }
                 });
@@ -24,27 +35,34 @@ export default function Header() {
                     if (data.boarding_house_name) {
                         setBoardingHouseName(data.boarding_house_name);
                     }
+                    // Set the display name from the fresh API data
+                    if (data.full_name) {
+                        setDisplayName(data.full_name);
+                    }
                 }
             } catch (error) {
-                console.error("Failed to fetch settings:", error);
-                // Fallback to the default name if the API call fails
+                console.error("Failed to fetch header data:", error);
             } finally {
-                setSettingsLoading(false);
+                setDataLoading(false);
             }
         };
 
-        fetchSettings();
+        fetchHeaderData();
     }, []);
 
     const renderUserDisplay = () => {
-        if (authLoading) {
+        // Wait for both the initial auth check and our data fetch to complete.
+        if (authLoading || dataLoading) {
             return <p className="text-sm text-gray-500">Loading...</p>;
         }
 
+        // Check if a user session exists from the auth hook.
         if (user) {
             return (
                 <>
-                    <p className="text-sm text-gray-600">{user.full_name}</p>
+                    {/* Use the displayName state, which is guaranteed to be fresh. */}
+                    {/* Fallback to user.full_name just in case. */}
+                    <p className="text-sm text-gray-800 font-medium">{displayName || user.full_name}</p>
                     <UserCircle className="h-8 w-8 text-gray-600" />
                 </>
             );
@@ -63,7 +81,7 @@ export default function Header() {
             <div className="flex items-center gap-3">
                 <Building2 className="h-6 w-6 text-gray-700" />
                 <h1 className="text-lg font-semibold text-gray-800">
-                    {settingsLoading ? 'Loading...' : boardingHouseName}
+                    {dataLoading ? 'Loading...' : boardingHouseName}
                 </h1>
             </div>
 

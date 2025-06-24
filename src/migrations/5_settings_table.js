@@ -22,16 +22,8 @@ CREATE TABLE IF NOT EXISTS settings (
     business_address TEXT,
     contact_phone VARCHAR(50),
     contact_email VARCHAR(255),
-    currency_symbol VARCHAR(10) DEFAULT '₱',
 
-    -- 2. Billing & Financial Settings
-    default_due_period INT DEFAULT 15, -- Days until a bill is due
-    late_fees_enabled BOOLEAN DEFAULT FALSE,
-    late_fee_type ENUM('Fixed', 'Percentage') DEFAULT 'Fixed',
-    late_fee_amount DECIMAL(10, 2) DEFAULT 0.00,
-    payment_methods JSON, -- Stores a list like ["Cash", "GCash"]
-
-    -- 3. API & Integration Settings
+    -- 2. API & Integration Settings
     gemini_api_key VARCHAR(255), -- IMPORTANT: Store encrypted in a real application
 
     -- Timestamps

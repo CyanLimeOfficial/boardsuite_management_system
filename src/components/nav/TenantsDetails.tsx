@@ -102,27 +102,6 @@ export default function TenantDetailsModal({ tenant, isOpen, onTenantUpdated, on
     }
   };
 
-  // New handler to mark tenant as paid
-  const handleMarkAsPaid = async () => {
-    setIsSubmitting(true);
-    setError(null);
-    try {
-        const token = localStorage.getItem('authToken');
-        // This new API endpoint should handle updating the tenant's last_payment_date to the current date on the server
-        const response = await fetch(`/api/dashboard/tenants/${tenant.id}/mark-paid`, {
-            method: 'POST',
-            headers: { 'Authorization': `Bearer ${token}` },
-        });
-        const data = await response.json();
-        if (!response.ok) throw new Error(data.message || 'Failed to update payment status.');
-        onTenantUpdated();
-        onClose();
-    } catch (err: any) {
-        setError(err.message);
-    } finally {
-        setIsSubmitting(false);
-    }
-  };
 
   return (
     <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex justify-center items-center z-50 p-4">
@@ -143,20 +122,6 @@ export default function TenantDetailsModal({ tenant, isOpen, onTenantUpdated, on
                     <p className="text-sm font-medium text-gray-600">Current Room</p>
                     <p className="font-bold text-lg text-blue-600">{formData.room_number ? `Room ${formData.room_number}` : 'Not Assigned'}</p>
                 </div>
-            </div>
-
-            {/* Payment Status Section */}
-            <div>
-                <h3 className="font-semibold text-gray-800 border-b pb-2 mb-2">Payment Status</h3>
-                 <div>
-                    <p className="text-sm font-medium text-gray-600">Last Payment Date</p>
-                    <p className="font-bold text-lg text-green-600">
-                        {formData.last_payment_date ? new Date(formData.last_payment_date).toLocaleDateString() : 'No payment recorded'}
-                    </p>
-                </div>
-                <button onClick={handleMarkAsPaid} disabled={isSubmitting} className="w-full mt-2 bg-emerald-600 text-white font-semibold py-2 px-3 rounded-lg hover:bg-emerald-700 disabled:bg-gray-300">
-                    {isSubmitting ? 'Processing...' : 'Mark as Paid Today'}
-                </button>
             </div>
 
             {/* Relocate Section */}

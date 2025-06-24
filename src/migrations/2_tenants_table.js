@@ -21,9 +21,14 @@ const createTableQuery = `
         address TEXT NULL,
         emergency_contact_name VARCHAR(255) NULL,
         emergency_contact_number VARCHAR(20) NULL,
-        room_id INT NULL,
+        
+        -- This column intentionally does NOT have a UNIQUE constraint
+        -- to allow multiple tenants to be assigned to the same room over time.
+        room_id INT NULL, 
+        
         registration_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         last_payment_date DATE NULL, 
+        
         -- The foreign key constraint with ON DELETE SET NULL
         CONSTRAINT fk_tenant_room
             FOREIGN KEY (room_id)

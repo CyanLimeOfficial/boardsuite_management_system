@@ -1,7 +1,7 @@
 // In file: app/dashboard/reports/page.tsx
 'use client';
 
-import React, { useState, useEffect, useCallback, ChangeEvent } from 'react';
+import React, { useState, useEffect, useCallback, ChangeEvent, ReactNode } from 'react';
 import { Calendar, DollarSign, Hourglass, Download, Loader2, Wand2 } from 'lucide-react';
 
 // --- Type Definitions ---
@@ -36,7 +36,7 @@ export default function ReportsPage() {
     
     const [aiSummary, setAiSummary] = useState<string | null>(null);
     const [summaryLoading, setSummaryLoading] = useState(false);
-    const [summaryError, setSummaryError] = useState<string | null>(null);
+    const [summaryError, setSummaryError] = useState<string | ReactNode | null>(null);
 
     const [scriptsLoaded, setScriptsLoaded] = useState(false);
 
@@ -52,11 +52,16 @@ export default function ReportsPage() {
             });
         };
 
-        Promise.all([
-            loadScript('https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js'),
-            loadScript('https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js')
-        ]).then(() => setScriptsLoaded(true))
-          .catch(() => setReportError("Failed to load PDF generation scripts."));
+        // --- FIX: Load scripts sequentially to ensure jspdf exists before autotable ---
+        loadScript('https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js')
+          .then(() => loadScript('https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js'))
+          .then(() => {
+            setScriptsLoaded(true);
+          })
+          .catch(() => {
+            setReportError("Failed to load PDF generation scripts.");
+          });
+          
     }, []);
     
     // --- Data Fetching ---
@@ -64,6 +69,7 @@ export default function ReportsPage() {
         setReportLoading(true);
         setReportError(null);
         setAiSummary(null); // Reset summary when month changes
+        setSummaryError(null); // Reset summary error as well
         try {
             const token = localStorage.getItem('authToken');
             const response = await fetch(`/api/dashboard/reports?year=${year}&month=${month}`, {
@@ -97,11 +103,27 @@ export default function ReportsPage() {
                 headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
                 body: JSON.stringify({ ...reportData, reportMonth })
             });
-            if (!response.ok) throw new Error('Failed to generate AI summary.');
-            const { summary } = await response.json();
-            setAiSummary(summary);
+            
+            const result = await response.json();
+            
+            if (!response.ok) {
+                // Throw the specific error message from the API, prioritizing the detailed 'error' field
+                throw new Error(result.error || result.message || 'Failed to generate AI summary.');
+            }
+            
+            setAiSummary(result.summary);
+
         } catch (err: any) {
-            setSummaryError(err.message);
+            // Check for the specific API key error and provide a link
+            if (err.message && err.message.includes("API Key is not configured")) {
+                 setSummaryError(
+                    <span>
+                        Google AI API Key is not configured. Please <a href="/dashboard/settings" className="font-bold underline text-blue-600 hover:text-blue-800">add it in the Settings page</a> to enable this feature.
+                    </span>
+                );
+            } else {
+                setSummaryError(err.message);
+            }
         } finally {
             setSummaryLoading(false);
         }
@@ -114,7 +136,8 @@ export default function ReportsPage() {
         }
 
         const reportMonth = new Date(selectedMonth+'-02').toLocaleString('default', { month: 'long', year: 'numeric' });
-        const { jsPDF } = (window as any).jspdf;
+        // @ts-ignore
+        const { jsPDF } = window.jspdf;
         const doc = new jsPDF();
         const pageWidth = doc.internal.pageSize.getWidth();
 
@@ -127,7 +150,7 @@ export default function ReportsPage() {
 
         doc.setFontSize(11);
         doc.setFont("helvetica", "bold");
-        doc.text("Summary:", 14, 45);
+        doc.text("AI Generated Summary:", 14, 45);
         doc.setFont("helvetica", "normal");
         const summaryLines = doc.splitTextToSize(aiSummary, pageWidth - 28);
         doc.text(summaryLines, 14, 52);
@@ -139,14 +162,16 @@ export default function ReportsPage() {
         doc.text(`Total Pending Dues: ${formatCurrency(reportData.totalPending)}`, pageWidth / 2, lastY);
         lastY += 10;
         
-        (doc as any).autoTable({
+        // @ts-ignore - The autoTable function is attached to the doc instance by the plugin
+        doc.autoTable({
             startY: lastY,
             head: [['Tenant', 'Amount Paid', 'Date']],
             body: reportData.payments.map(p => [p.tenant_name, formatCurrency(p.amount_paid), new Date(p.payment_date).toLocaleDateString()]),
             headStyles: { fillColor: [22, 160, 133] },
         });
 
-        (doc as any).autoTable({
+        // @ts-ignore
+        doc.autoTable({
             head: [['Tenant', 'Amount Due', 'Status']],
             body: reportData.pendingBills.map(b => [b.tenant_name, formatCurrency(b.amount_due), b.status]),
             headStyles: { fillColor: [192, 57, 43] },
@@ -160,32 +185,32 @@ export default function ReportsPage() {
     return (
         <div className="p-4 md:p-8 bg-gray-50 min-h-screen space-y-8">
             <header>
-                <h1 className="text-4xl font-bold text-gray-800">Financial Reports</h1>
-                <p className="text-lg text-gray-600">Analyze financial performance and generate summaries.</p>
+                <h1 className="text-4xl font-bold text-gray-900">Financial Reports</h1>
+                <p className="text-lg text-gray-700">Analyze financial performance and generate summaries.</p>
             </header>
 
             <div className="bg-white p-6 rounded-xl shadow-md">
                 <div className="flex flex-wrap justify-between items-center mb-6 gap-4">
-                    <h2 className="text-2xl font-semibold text-gray-700">Monthly Report</h2>
+                    <h2 className="text-2xl font-semibold text-gray-900">Monthly Report</h2>
                     <div className="flex items-center gap-2">
-                        <Calendar className="h-5 w-5 text-gray-500" />
+                        <Calendar className="h-5 w-5 text-gray-700" />
                         <input type="month" value={selectedMonth} onChange={(e) => setSelectedMonth(e.target.value)} className="p-2 border border-gray-300 rounded-lg text-gray-900"/>
                     </div>
                 </div>
 
-                {reportLoading ? <div className="text-center py-8"><Loader2 className="h-8 w-8 animate-spin mx-auto text-gray-400" /></div> : 
+                {reportLoading ? <div className="text-center py-8"><Loader2 className="h-8 w-8 animate-spin mx-auto text-gray-500" /></div> : 
                  reportError ? <div className="text-center py-8 text-red-600">{reportError}</div> :
                  reportData && (
                     <>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
                             {/* Stat Cards */}
-                            <div className="bg-blue-50 p-4 rounded-lg flex items-center gap-4"><div className="bg-blue-200 p-3 rounded-full"><DollarSign className="h-6 w-6 text-blue-600"/></div><div><p className="text-sm text-blue-800">Sales for {new Date(selectedMonth+'-02').toLocaleString('default', { month: 'long' })}</p><p className="text-2xl font-bold text-blue-900">{formatCurrency(reportData.monthlySales)}</p></div></div>
-                            <div className="bg-orange-50 p-4 rounded-lg flex items-center gap-4"><div className="bg-orange-200 p-3 rounded-full"><Hourglass className="h-6 w-6 text-orange-600"/></div><div><p className="text-sm text-orange-800">Total Pending Dues</p><p className="text-2xl font-bold text-orange-900">{formatCurrency(reportData.totalPending)}</p></div></div>
+                            <div className="bg-blue-50 p-4 rounded-lg flex items-center gap-4"><div className="bg-blue-200 p-3 rounded-full"><DollarSign className="h-6 w-6 text-blue-600"/></div><div><p className="text-sm text-blue-800 font-medium">Sales for {new Date(selectedMonth+'-02').toLocaleString('default', { month: 'long' })}</p><p className="text-2xl font-bold text-blue-900">{formatCurrency(reportData.monthlySales)}</p></div></div>
+                            <div className="bg-orange-50 p-4 rounded-lg flex items-center gap-4"><div className="bg-orange-200 p-3 rounded-full"><Hourglass className="h-6 w-6 text-orange-600"/></div><div><p className="text-sm text-orange-800 font-medium">Total Pending Dues</p><p className="text-2xl font-bold text-orange-900">{formatCurrency(reportData.totalPending)}</p></div></div>
                         </div>
                         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
                             {/* Data Tables */}
-                            <div><h3 className="text-xl font-semibold text-gray-700 mb-4">Payments This Month</h3><div className="overflow-auto max-h-96 rounded-lg border"><table className="min-w-full text-sm"><thead className="bg-gray-100 sticky top-0"><tr className="text-left"><th className="p-3">Tenant</th><th className="p-3">Amount</th><th className="p-3">Date</th></tr></thead><tbody>{reportData.payments.map(p => (<tr key={p.id} className="border-t"><td className="p-3">{p.tenant_name}</td><td className="p-3 text-green-600 font-medium">{formatCurrency(p.amount_paid)}</td><td className="p-3">{new Date(p.payment_date).toLocaleDateString()}</td></tr>))}</tbody></table>{reportData.payments.length === 0 && <p className="p-4 text-center text-gray-500">No payments recorded for this month.</p>}</div></div>
-                            <div><h3 className="text-xl font-semibold text-gray-700 mb-4">All Pending Bills</h3><div className="overflow-auto max-h-96 rounded-lg border"><table className="min-w-full text-sm"><thead className="bg-gray-100 sticky top-0"><tr className="text-left"><th className="p-3">Tenant</th><th className="p-3">Amount Due</th><th className="p-3">Status</th></tr></thead><tbody>{reportData.pendingBills.map(b => (<tr key={b.id} className="border-t"><td className="p-3">{b.tenant_name}</td><td className="p-3 text-red-600 font-medium">{formatCurrency(b.amount_due)}</td><td className="p-3">{b.status}</td></tr>))}</tbody></table>{reportData.pendingBills.length ===  0 && <p className="p-4 text-center text-gray-500">No pending bills.</p>}</div></div>
+                            <div><h3 className="text-xl font-semibold text-gray-900 mb-4">Payments This Month</h3><div className="overflow-auto max-h-96 rounded-lg border"><table className="min-w-full text-sm"><thead className="bg-gray-100 sticky top-0"><tr className="text-left"><th className="p-3 font-semibold text-gray-800">Tenant</th><th className="p-3 font-semibold text-gray-800">Amount</th><th className="p-3 font-semibold text-gray-800">Date</th></tr></thead><tbody>{reportData.payments.map(p => (<tr key={p.id} className="border-t"><td className="p-3 text-gray-800">{p.tenant_name}</td><td className="p-3 text-green-700 font-medium">{formatCurrency(p.amount_paid)}</td><td className="p-3 text-gray-800">{new Date(p.payment_date).toLocaleDateString()}</td></tr>))}</tbody></table>{reportData.payments.length === 0 && <p className="p-4 text-center text-gray-600">No payments recorded for this month.</p>}</div></div>
+                            <div><h3 className="text-xl font-semibold text-gray-900 mb-4">All Pending Bills</h3><div className="overflow-auto max-h-96 rounded-lg border"><table className="min-w-full text-sm"><thead className="bg-gray-100 sticky top-0"><tr className="text-left"><th className="p-3 font-semibold text-gray-800">Tenant</th><th className="p-3 font-semibold text-gray-800">Amount Due</th><th className="p-3 font-semibold text-gray-800">Status</th></tr></thead><tbody>{reportData.pendingBills.map(b => (<tr key={b.id} className="border-t"><td className="p-3 text-gray-800">{b.tenant_name}</td><td className="p-3 text-red-700 font-medium">{formatCurrency(b.amount_due)}</td><td className="p-3 text-gray-800">{b.status}</td></tr>))}</tbody></table>{reportData.pendingBills.length === 0 && <p className="p-4 text-center text-gray-600">No pending bills.</p>}</div></div>
                         </div>
                     </>
                 )}
@@ -193,13 +218,13 @@ export default function ReportsPage() {
 
             {/* --- AI Summary & Export Section --- */}
             <div className="bg-white p-6 rounded-xl shadow-md">
-                <h2 className="text-2xl font-semibold text-gray-700 mb-4">Summary & Export</h2>
+                <h2 className="text-2xl font-semibold text-gray-900 mb-4">Summary & Export</h2>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6 items-start">
                     <div className="md:col-span-2">
-                        <h3 className="font-semibold text-gray-600 mb-2">AI Generated Summary</h3>
-                        {summaryLoading ? <div className="w-full bg-gray-100 rounded-lg p-4 h-32 flex items-center justify-center"><Loader2 className="h-6 w-6 animate-spin text-gray-400" /></div> :
-                         summaryError ? <div className="w-full bg-red-50 text-red-700 rounded-lg p-4 h-32">{summaryError}</div> :
-                         <textarea readOnly value={aiSummary || "Click 'Generate AI Summary' to create a statement based on the report data."} className="w-full h-32 bg-gray-50 border rounded-lg p-4 text-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500 transition"/>
+                        <h3 className="font-semibold text-gray-800 mb-2">AI Generated Summary</h3>
+                        {summaryLoading ? <div className="w-full bg-gray-100 rounded-lg p-4 h-32 flex items-center justify-center"><Loader2 className="h-6 w-6 animate-spin text-gray-500" /></div> :
+                         summaryError ? <div className="w-full bg-red-50 text-red-700 rounded-lg p-4 h-32 flex items-center justify-center">{summaryError}</div> :
+                         <textarea readOnly value={aiSummary || "Click 'Generate AI Summary' to create a statement based on the report data."} className="w-full h-32 bg-gray-50 border rounded-lg p-4 text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 transition"/>
                         }
                     </div>
                     <div className="space-y-3">

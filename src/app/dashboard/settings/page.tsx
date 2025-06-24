@@ -2,93 +2,98 @@
 'use client';
 
 import React, { useState, useEffect, FormEvent, ChangeEvent } from 'react';
-import { Loader2, Building, Wallet, KeyRound } from 'lucide-react';
+import { Loader2, Building, KeyRound, User, Lock } from 'lucide-react';
 
 // --- Type Definitions ---
-interface SettingsData {
-    boarding_house_name: string;
-    business_address: string;
-    contact_phone: string;
-    contact_email: string;
-    currency_symbol: string;
-    default_due_period: number;
-    late_fees_enabled: boolean;
-    late_fee_type: 'Fixed' | 'Percentage';
-    late_fee_amount: number;
-    payment_methods: string[];
-    gemini_api_key: string;
+interface FormData {
+    boarding_house_name?: string;
+    business_address?: string;
+    contact_phone?: string;
+    contact_email?: string;
+    gemini_api_key?: string;
+    // User fields
+    full_name?: string;
+    username?: string;
+    new_password?: string;
+    confirm_password?: string;
 }
 
 // --- Main Component ---
 export default function SettingsPage() {
-    const [settings, setSettings] = useState<Partial<SettingsData>>({});
+    const [formData, setFormData] = useState<FormData>({});
     const [loading, setLoading] = useState(true);
     const [isSaving, setIsSaving] = useState(false);
-    const [error, setError] = useState<string | null>(null);
-
-    // --- Data Fetching ---
+    
+    // --- Script & Data Loading ---
     useEffect(() => {
-        const fetchSettings = async () => {
+        // Dynamically load SweetAlert2 script
+        const script = document.createElement('script');
+        script.src = 'https://cdn.jsdelivr.net/npm/sweetalert2@11';
+        document.body.appendChild(script);
+
+        const fetchSettingsAndUser = async () => {
             setLoading(true);
             try {
                 const token = localStorage.getItem('authToken');
                 const response = await fetch('/api/dashboard/settings', {
                     headers: { 'Authorization': `Bearer ${token}` }
                 });
-                if (!response.ok) throw new Error('Failed to load settings.');
+                if (!response.ok) throw new Error('Failed to load settings and user data.');
                 const data = await response.json();
-                setSettings(data);
+                setFormData(data);
             } catch (err: any) {
-                setError(err.message);
+                // @ts-ignore
+                const Swal = (window as any).Swal;
+                if (Swal) {
+                    Swal.fire({
+                        title: 'Error!',
+                        text: err.message,
+                        icon: 'error',
+                        confirmButtonText: 'OK'
+                    });
+                } else {
+                    alert(err.message);
+                }
             } finally {
                 setLoading(false);
             }
         };
-        fetchSettings();
-    }, []);
+        
+        fetchSettingsAndUser();
 
-    // Dynamically load SweetAlert2 script
-    useEffect(() => {
-        const script = document.createElement('script');
-        script.src = 'https://cdn.jsdelivr.net/npm/sweetalert2@11';
-        document.body.appendChild(script);
         return () => {
             document.body.removeChild(script);
         };
     }, []);
 
     // --- Handlers ---
-    const handleInputChange = (e: ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
-        const { name, value, type } = e.target;
-        
-        let processedValue: string | number | boolean = value;
-        if (type === 'checkbox') {
-            processedValue = (e.target as HTMLInputElement).checked;
-        }
-        if (type === 'number') {
-            processedValue = parseFloat(value) || 0;
-        }
-
-        setSettings(prev => ({ ...prev, [name]: processedValue }));
-    };
-
-    const handlePaymentMethodsChange = (e: ChangeEvent<HTMLInputElement>) => {
-        const methods = e.target.value.split(',').map(method => method.trim()).filter(Boolean);
-        setSettings(prev => ({ ...prev, payment_methods: methods }));
+    const handleInputChange = (e: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+        setFormData(prev => ({ ...prev, [e.target.name]: e.target.value }));
     };
 
     const handleSave = async (e: FormEvent) => {
         e.preventDefault();
-        setIsSaving(true);
+        
         // @ts-ignore
         const Swal = (window as any).Swal;
 
+        if (formData.new_password && formData.new_password !== formData.confirm_password) {
+            Swal.fire({
+                title: 'Password Mismatch',
+                text: 'The new passwords do not match. Please try again.',
+                icon: 'warning',
+                confirmButtonText: 'OK'
+            });
+            return;
+        }
+
+        setIsSaving(true);
         try {
             const token = localStorage.getItem('authToken');
             const response = await fetch('/api/dashboard/settings', {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-                body: JSON.stringify(settings)
+                body: JSON.stringify(formData)
             });
             
             const result = await response.json();
@@ -96,18 +101,18 @@ export default function SettingsPage() {
             if (!response.ok) {
                 throw new Error(result.message || 'Failed to save settings.');
             }
-            
+
             await Swal.fire({
                 title: 'Success!',
                 text: 'Settings have been saved successfully.',
                 icon: 'success',
-                confirmButtonText: 'OK',
                 timer: 2000,
                 timerProgressBar: true,
+                showConfirmButton: false
             });
 
+            // Reload the page to ensure all components, including the header, refetch data.
             window.location.reload();
-
         } catch (err: any) {
             Swal.fire({
                 title: 'Error!',
@@ -129,38 +134,37 @@ export default function SettingsPage() {
         <div className="p-4 md:p-8 bg-gray-50 min-h-screen">
             <header className="mb-8">
                 <h1 className="text-4xl font-bold text-gray-800">System Settings</h1>
-                <p className="text-lg text-gray-600">Manage your business information, billing rules, and integrations.</p>
+                <p className="text-lg text-gray-600">Manage your business, user account, and integrations.</p>
             </header>
 
             <form onSubmit={handleSave} className="space-y-12">
-                {/* --- Section 1: General & Business Information --- */}
+                {/* --- Business Information --- */}
                 <div className="bg-white p-6 rounded-xl shadow-md">
                     <h2 className="text-2xl font-semibold text-gray-700 mb-6 flex items-center"><Building className="mr-3 h-6 w-6 text-blue-500" />Business Information</h2>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        <div><label htmlFor="boarding_house_name" className="block text-sm font-medium text-gray-700">Boarding House Name</label><input type="text" name="boarding_house_name" value={settings.boarding_house_name || ''} onChange={handleInputChange} className="mt-1 block w-full text-gray-900 border-gray-300 rounded-md shadow-sm"/></div>
-                        <div><label htmlFor="contact_phone" className="block text-sm font-medium text-gray-700">Contact Phone</label><input type="tel" name="contact_phone" value={settings.contact_phone || ''} onChange={handleInputChange} className="mt-1 block w-full text-gray-900 border-gray-300 rounded-md shadow-sm"/></div>
-                        <div className="md:col-span-2"><label htmlFor="business_address" className="block text-sm font-medium text-gray-700">Business Address</label><textarea name="business_address" value={settings.business_address || ''} onChange={handleInputChange} rows={2} className="mt-1 block w-full text-gray-900 border-gray-300 rounded-md shadow-sm"></textarea></div>
-                        <div><label htmlFor="contact_email" className="block text-sm font-medium text-gray-700">Contact Email</label><input type="email" name="contact_email" value={settings.contact_email || ''} onChange={handleInputChange} className="mt-1 block w-full text-gray-900 border-gray-300 rounded-md shadow-sm"/></div>
-                        <div><label htmlFor="currency_symbol" className="block text-sm font-medium text-gray-700">Currency Symbol</label><input type="text" name="currency_symbol" value={settings.currency_symbol || 'PHP'} onChange={handleInputChange} className="mt-1 block w-full text-gray-900 border-gray-300 rounded-md shadow-sm"/></div>
+                        <div><label className="block text-sm font-medium text-gray-700">Boarding House Name</label><input type="text" name="boarding_house_name" value={formData.boarding_house_name || ''} onChange={handleInputChange} className="mt-1 block w-full text-gray-900 border-gray-300 rounded-md shadow-sm"/></div>
+                        <div><label className="block text-sm font-medium text-gray-700">Contact Phone</label><input type="tel" name="contact_phone" value={formData.contact_phone || ''} onChange={handleInputChange} className="mt-1 block w-full text-gray-900 border-gray-300 rounded-md shadow-sm"/></div>
+                        <div className="md:col-span-2"><label className="block text-sm font-medium text-gray-700">Business Address</label><textarea name="business_address" value={formData.business_address || ''} onChange={handleInputChange} rows={2} className="mt-1 block w-full text-gray-900 border-gray-300 rounded-md shadow-sm"></textarea></div>
+                        <div><label className="block text-sm font-medium text-gray-700">Contact Email</label><input type="email" name="contact_email" value={formData.contact_email || ''} onChange={handleInputChange} className="mt-1 block w-full text-gray-900 border-gray-300 rounded-md shadow-sm"/></div>
                     </div>
                 </div>
 
-                {/* --- Section 2: Billing & Financial Settings --- */}
+                {/* --- User Account Management --- */}
                 <div className="bg-white p-6 rounded-xl shadow-md">
-                    <h2 className="text-2xl font-semibold text-gray-700 mb-6 flex items-center"><Wallet className="mr-3 h-6 w-6 text-green-500" />Billing & Financials</h2>
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                        <div><label htmlFor="default_due_period" className="block text-sm font-medium text-gray-700">Default Due Period (Days)</label><input type="number" name="default_due_period" value={settings.default_due_period || 15} onChange={handleInputChange} className="mt-1 block w-full text-gray-900 border-gray-300 rounded-md shadow-sm"/></div>
-                        <div className="flex items-center space-x-4 pt-6"><input type="checkbox" name="late_fees_enabled" checked={!!settings.late_fees_enabled} onChange={handleInputChange} className="h-5 w-5 text-blue-600 border-gray-300 rounded"/><label htmlFor="late_fees_enabled" className="text-sm font-medium text-gray-700">Enable Late Fees</label></div>
-                        <div><label htmlFor="late_fee_type" className="block text-sm font-medium text-gray-700">Late Fee Type</label><select name="late_fee_type" value={settings.late_fee_type || 'Fixed'} onChange={handleInputChange} className="mt-1 block w-full text-gray-900 border-gray-300 rounded-md shadow-sm"><option>Fixed</option><option>Percentage</option></select></div>
-                        <div><label htmlFor="late_fee_amount" className="block text-sm font-medium text-gray-700">Late Fee Amount</label><input type="number" step="0.01" name="late_fee_amount" value={settings.late_fee_amount || 0} onChange={handleInputChange} className="mt-1 block w-full text-gray-900 border-gray-300 rounded-md shadow-sm"/></div>
-                        <div className="md:col-span-2"><label htmlFor="payment_methods" className="block text-sm font-medium text-gray-700">Accepted Payment Methods</label><input type="text" name="payment_methods" value={(settings.payment_methods || []).join(', ')} onChange={handlePaymentMethodsChange} className="mt-1 block w-full text-gray-900 border-gray-300 rounded-md shadow-sm"/><p className="text-xs text-gray-500 mt-1">Separate methods with a comma (e.g., Cash, GCash, Bank Transfer)</p></div>
-                    </div>
+                     <h2 className="text-2xl font-semibold text-gray-700 mb-6 flex items-center"><User className="mr-3 h-6 w-6 text-green-500" />User Account</h2>
+                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div><label className="block text-sm font-medium text-gray-700">Full Name</label><input type="text" name="full_name" value={formData.full_name || ''} onChange={handleInputChange} className="mt-1 block w-full text-gray-900 border-gray-300 rounded-md shadow-sm"/></div>
+                        <div><label className="block text-sm font-medium text-gray-700">Username</label><input type="text" name="username" value={formData.username || ''} readOnly className="mt-1 block w-full text-gray-900 bg-gray-100 border-gray-300 rounded-md shadow-sm cursor-not-allowed"/></div>
+                        <div className="md:col-span-2"><hr/></div>
+                        <div><label className="block text-sm font-medium text-gray-700 flex items-center gap-2"><Lock className="h-4 w-4"/>New Password</label><input type="password" name="new_password" placeholder="Leave blank to keep current password" onChange={handleInputChange} className="mt-1 block w-full text-gray-900 border-gray-300 rounded-md shadow-sm"/></div>
+                        <div><label className="block text-sm font-medium text-gray-700">Confirm New Password</label><input type="password" name="confirm_password" placeholder="Confirm new password" onChange={handleInputChange} className="mt-1 block w-full text-gray-900 border-gray-300 rounded-md shadow-sm"/></div>
+                     </div>
                 </div>
                 
-                 {/* --- Section 3: API & Integration Settings --- */}
+                {/* --- API & Integrations --- */}
                 <div className="bg-white p-6 rounded-xl shadow-md">
                     <h2 className="text-2xl font-semibold text-gray-700 mb-6 flex items-center"><KeyRound className="mr-3 h-6 w-6 text-purple-500" />API & Integrations</h2>
-                    <div><label htmlFor="gemini_api_key" className="block text-sm font-medium text-gray-700">Google AI (Gemini) API Key</label><input type="password" name="gemini_api_key" value={settings.gemini_api_key || ''} onChange={handleInputChange} className="mt-1 block w-full text-gray-900 border-gray-300 rounded-md shadow-sm"/></div>
+                    <div><label className="block text-sm font-medium text-gray-700">Google AI (Gemini) API Key</label><input type="password" name="gemini_api_key" value={formData.gemini_api_key || ''} onChange={handleInputChange} className="mt-1 block w-full text-gray-900 border-gray-300 rounded-md shadow-sm"/></div>
                 </div>
 
                 <div className="flex justify-end pt-4">

@@ -2,6 +2,7 @@
 
 import { NextResponse } from 'next/server';
 import { verify } from 'jsonwebtoken';
+import getPool from '@/library/db'; // Import the database utility
 
 export async function POST(request: Request) {
     try {
@@ -11,15 +12,14 @@ export async function POST(request: Request) {
         }
         verify(token, process.env.JWT_SECRET || 'YOUR_SECRET_KEY');
 
-        // --- FIX: Securely get the API key from environment variables ---
-        // On the server, API keys must be stored securely, not left blank.
-        // You need to create a .env.local file in your project's root folder
-        // and add your Google AI API key like this:
-        // GEMINI_API_KEY=YOUR_API_KEY_HERE
-        const apiKey = process.env.GEMINI_API_KEY;
+        // --- FIX: Get the API key from the database ---
+        const pool = getPool();
+        const [settingsResult] = await pool.query("SELECT gemini_api_key FROM settings WHERE id = 1 LIMIT 1");
+        const settings = (settingsResult as any[])[0];
+        const apiKey = settings?.gemini_api_key;
 
         if (!apiKey) {
-            throw new Error("GEMINI_API_KEY is not configured in the environment variables.");
+            throw new Error("Google AI API Key is not configured in the settings. Please add it on the Settings page.");
         }
 
         const reportData = await request.json();
@@ -36,7 +36,7 @@ export async function POST(request: Request) {
         const prompt = `
             You are a financial analyst for a property manager in Naval, Eastern Visayas, Philippines.
             Your task is to write a concise, professional summary statement based on the following financial data for ${reportMonth}.
-            The current date is Sunday, June 22, 2025 at 11:57 PM.
+            The current date is Monday, June 23, 2025 at 9:44 PM PST.
 
             Financial Data:
             - Total Sales This Month: PHP ${sales.toFixed(2)} from ${payments.length} payments.
