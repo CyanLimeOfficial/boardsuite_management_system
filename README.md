@@ -8,13 +8,13 @@
   <img src="https://img.shields.io/badge/AI-Gemini-purple?style=for-the-badge&logo=google-gemini&logoColor=white" alt="Gemini AI"/>
 </p>
 
-An AI-enhanced, full-stack web application designed to provide a robust and efficient platform for managing boarding house operations in Naval, Eastern Visayas, Philippines.
+An AI-enhanced, full-stack web application designed to provide a robust and efficient platform for managing boarding house operations.
 
 ## About The Project
 
 BoardSuite Management System is a comprehensive solution built with Next.js, leveraging modern web technologies to deliver a seamless user experience. It offers property managers a centralized dashboard to oversee tenants, rooms, billing, and financial reporting. A key feature is its integration with Google's Gemini AI, which provides intelligent insights and summaries for financial reports, transforming raw data into actionable information.
 
-### Core Technologies
+### Tech Stacks
 * **Framework:** [Next.js](https://nextjs.org/)
 * **UI Library:** [React](https://react.dev/)
 * **Language:** [TypeScript](https://www.typescriptlang.org/)
