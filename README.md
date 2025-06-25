@@ -73,7 +73,7 @@ To get a local copy up and running, follow these steps.
 
 1.  **Clone the repository:**
     ```sh
-    git clone [https://your-repository-url.com](https://your-repository-url.com)
+    git clone https://github.com/CyanLimeOfficial/boardsuite_management_system
     ```
 2.  **Navigate to the project directory:**
     ```sh
